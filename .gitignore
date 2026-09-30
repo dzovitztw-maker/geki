@@ -1,0 +1,6 @@
+.geki-live/
+.venv/
+__pycache__/
+*.py[cod]
+*.mp3
+.DS_Store
