@@ -39,30 +39,30 @@ SOFT = "░"
 # ═════════════════════════════════════════════════════════════
 
 def clear():
-    """Efface le terminal."""
+    """Clear the terminal screen."""
     sys.stdout.write("\033[2J\033[H")
     sys.stdout.flush()
 
 
 def hide_cursor():
-    """Cache le curseur."""
+    """Hide the terminal cursor."""
     sys.stdout.write("\033[?25l")
     sys.stdout.flush()
 
 
 def show_cursor():
-    """Affiche le curseur."""
+    """Show the terminal cursor."""
     sys.stdout.write("\033[?25h")
     sys.stdout.flush()
 
 
 def terminal_size():
-    """Retourne la taille actuelle du terminal."""
+    """Return the current terminal dimensions."""
     return shutil.get_terminal_size((100, 30))
 
 
 def color(r, g, b, text):
-    """Couleur TrueColor ANSI."""
+    """Wrap text in an ANSI TrueColor sequence."""
     return f"\033[38;2;{r};{g};{b}m{text}\033[0m"
 
 
@@ -75,7 +75,7 @@ class AudioEngine:
     def __init__(self, filename=None, sample_rate=None):
 
         # ─────────────────────────────────────────
-        # Chargement du fichier
+        # Load the audio file.
         # ─────────────────────────────────────────
 
         if filename is not None:
@@ -85,7 +85,7 @@ class AudioEngine:
                 always_2d=True
             )
 
-            # Conversion en mono pour l'analyse FFT.
+            # Convert to mono for FFT analysis.
             self.mono = np.mean(
                 self.data,
                 axis=1
@@ -107,7 +107,7 @@ class AudioEngine:
         self.fft_size = 2048
 
         # ─────────────────────────────────────────
-        # Valeurs audio
+        # Audio values.
         # ─────────────────────────────────────────
 
         self.bass = 0.0
@@ -115,23 +115,22 @@ class AudioEngine:
         self.treble = 0.0
         self.energy = 0.0
 
-        # Sensibilité globale.
+        # Global sensitivity.
         self.sensitivity = 1.15
 
-        # Plafond adaptatif par bande (AGC).
-        # Suit le pic le plus fort récent et redescend
-        # lentement — voir adaptive_normalize() dans analyze().
+        # Adaptive per-band ceiling (AGC).
+        # Tracks the strongest recent peak and decays slowly;
+        # see adaptive_normalize() in analyze().
         self.bass_ceiling = -40.0
         self.mid_ceiling = -40.0
         self.treble_ceiling = -40.0
 
         # ─────────────────────────────────────────
-        # Spectre multi-bandes (pour le starburst)
+        # Multi-band spectrum (used by starburst).
         #
-        # 48 bandes log-espacées de 30 Hz à 16 kHz.
-        # Beaucoup plus de détail que bass/mid/treble,
-        # avec sa propre normalisation adaptative par bin
-        # et un peak-hold pour l'effet "coup" visuel.
+        # 48 logarithmically spaced bands from 30 Hz to 16 kHz.
+        # This provides more detail than bass/mid/treble, with
+        # per-bin adaptive normalization and a peak hold effect.
         # ─────────────────────────────────────────
 
         self.num_bins = 48
@@ -158,13 +157,10 @@ class AudioEngine:
 
             if not mask.any():
 
-                # Tranche trop étroite pour contenir un bin FFT (ça
-                # arrive côté graves : l'écart log y est parfois plus
-                # fin que la résolution de la FFT). Sans ce filet,
-                # cette tranche resterait à 0 en permanence, quel que
-                # soit le morceau. On la rattache au bin FFT le plus
-                # proche de son centre pour qu'elle reste toujours
-                # vivante.
+                # This band is too narrow to contain an FFT bin. This
+                # can happen in the bass range when logarithmic spacing
+                # is finer than the FFT resolution. Attach the nearest
+                # FFT bin to its center so the band can still respond.
 
                 center = (lo + hi) / 2.0
                 nearest_index = int(np.argmin(np.abs(freqs_full - center)))
@@ -178,7 +174,7 @@ class AudioEngine:
         self.spectrum_ceiling = np.full(self.num_bins, -40.0)
         self.spectrum_peak = np.zeros(self.num_bins)
 
-        # État pour la détection de kick (thème "shockwave").
+        # State used for kick detection.
         self.prev_bass_raw = 0.0
         self.last_kick_time = 0.0
         self.shockwaves = []
@@ -218,7 +214,7 @@ class AudioEngine:
             self.position:end
         ]
 
-        # Fin du morceau.
+        # End of the track.
         if len(chunk) < frames:
 
             if len(chunk) > 0:
@@ -244,13 +240,13 @@ class AudioEngine:
 
     def analyze(self):
 
-        # Récupération de la fenêtre audio récente.
+        # Get the latest audio window.
         chunk = self.analysis_chunk()
 
         if len(chunk) < self.fft_size:
             return
 
-        # Fenêtre Hann.
+        # Apply a Hann window.
         window = np.hanning(
             len(chunk)
         )
@@ -259,7 +255,7 @@ class AudioEngine:
         n = len(signal)
 
         # ─────────────────────────────────────────
-        # FFT correctement normalisée
+        # Properly normalized FFT.
         # ─────────────────────────────────────────
 
         spectrum = np.fft.rfft(
@@ -271,8 +267,8 @@ class AudioEngine:
             / n
         )
 
-        # Compensation approximative du gain
-        # perdu avec la fenêtre Hann.
+        # Approximate compensation for gain lost through
+        # the Hann window.
         magnitude *= 2.0
 
         frequencies = np.fft.rfftfreq(
@@ -281,7 +277,7 @@ class AudioEngine:
         )
 
         # ─────────────────────────────────────────
-        # Bandes de fréquences
+        # Frequency bands.
         # ─────────────────────────────────────────
 
         bass_mask = (
@@ -303,7 +299,7 @@ class AudioEngine:
         )
 
         # ─────────────────────────────────────────
-        # Mesure RMS par bande
+        # RMS measurement per band.
         # ─────────────────────────────────────────
 
         def band_level(mask):
@@ -334,7 +330,7 @@ class AudioEngine:
         )
 
         # ─────────────────────────────────────────
-        # Conversion en dB
+        # Convert to decibels.
         # ─────────────────────────────────────────
 
         def to_db(value):
@@ -359,15 +355,12 @@ class AudioEngine:
         )
 
         # ─────────────────────────────────────────
-        # Normalisation adaptative (AGC par bande)
+        # Adaptive normalization (per-band AGC).
         #
-        # Le plafond ("ceiling") suit le niveau le plus
-        # fort récemment observé sur chaque bande, et
-        # redescend lentement quand il n'est plus atteint.
-        # Le visualizer s'adapte ainsi automatiquement à la
-        # dynamique de n'importe quel morceau, au lieu de
-        # saturer en permanence sur les basses avec un
-        # seuil fixe.
+        # The ceiling tracks the strongest recent level in each band
+        # and slowly falls when that level is no longer reached. This
+        # lets the visualizer adapt to each track's dynamics instead
+        # of constantly saturating the bass with a fixed threshold.
         # ─────────────────────────────────────────
 
         floor = -70.0
@@ -423,7 +416,7 @@ class AudioEngine:
         )
 
         # ─────────────────────────────────────────
-        # Courbe de sensibilité
+        # Sensitivity curve.
         # ─────────────────────────────────────────
 
         bass = (
@@ -465,7 +458,7 @@ class AudioEngine:
         # ─────────────────────────────────────────
         # Smoothing
         #
-        # Montée rapide, descente plus lente.
+        # Fast attack, slower release.
         # ─────────────────────────────────────────
 
         attack = 0.35
@@ -499,7 +492,7 @@ class AudioEngine:
             treble
         )
 
-        # Énergie globale.
+        # Overall energy.
         self.energy = (
             self.bass * 0.55
             +
@@ -509,7 +502,7 @@ class AudioEngine:
         )
 
         # ─────────────────────────────────────────
-        # Spectre multi-bandes (starburst)
+        # Multi-band spectrum (starburst).
         # ─────────────────────────────────────────
 
         spectrum_raw = np.array([
@@ -536,11 +529,11 @@ class AudioEngine:
             1.0
         )
 
-        # Un peu de contraste (fait ressortir les pics nets).
+        # Add contrast to make sharp peaks stand out.
         spectrum_norm = spectrum_norm ** 0.8
 
-        # Lissage percussif : montée quasi instantanée,
-        # descente franche (pas de "flottement" comme le blob).
+        # Percussive smoothing: near-instant attack and a quick
+        # release, without the floating effect of the blob.
         spec_attack = 0.75
         spec_release_smooth = 0.30
 
@@ -552,8 +545,8 @@ class AudioEngine:
             self.spectrum * (1 - spec_release_smooth) + spectrum_norm * spec_release_smooth
         )
 
-        # Peak-hold : petit marqueur qui grimpe avec le pic
-        # et retombe lentement (effet VU-mètre / "coup").
+        # Peak hold: a small marker rises with the peak and falls
+        # slowly, like a VU meter.
         peak_fall = 0.025
 
         self.spectrum_peak = np.maximum(
@@ -562,16 +555,13 @@ class AudioEngine:
         )
 
         # ─────────────────────────────────────────
-        # Détection de kick (front montant du bass BRUT)
+        # Kick detection (rising edge of the raw bass level).
         #
-        # Utilisée par le thème "shockwave". Important : on utilise
-        # ici la variable locale `bass` (avant le lissage attack/
-        # release qui alimente self.bass), parce que self.bass a
-        # une release lente et redescend rarement sous le seuil
-        # entre deux kicks rapprochés — le front montant ne se
-        # redéclencherait quasiment jamais. Le bass brut, lui, suit
-        # l'énergie instantanée frame par frame et retombe bien
-        # entre deux coups.
+        # Use the local `bass` value before attack/release smoothing
+        # updates self.bass. Its slower release may not fall below the
+        # threshold between close kicks, preventing a new rising edge.
+        # The raw value follows frame-by-frame energy and falls between
+        # beats, so it can reliably detect each kick.
         # ─────────────────────────────────────────
 
         now = time.perf_counter()
@@ -589,14 +579,14 @@ class AudioEngine:
 
         self.prev_bass_raw = bass
 
-        # Purge des anneaux dont la durée de vie visuelle est dépassée.
+        # Remove rings whose visual lifetime has expired.
         self.shockwaves = [
             spawn_time for spawn_time in self.shockwaves
             if now - spawn_time < 1.2
         ]
 
     # ═════════════════════════════════════════════
-    # TEMPS
+    # TIME
     # ═════════════════════════════════════════════
 
     def position_seconds(self):
@@ -650,14 +640,13 @@ def format_time(seconds):
 # GEKI STARBURST
 # ═════════════════════════════════════════════════════════════
 #
-# Un noyau central qui pulse sur les basses, entouré de pointes
-# radiales (une par bin de fréquence) qui jaillissent du centre.
-# Montée quasi instantanée + peak-hold => rendu "coup" plutôt
-# qu'organique/lissé.
+# A central core pulses with the bass, surrounded by radial spikes
+# (one per frequency bin) that shoot outward. A near-instant attack
+# and peak hold create sharp hits instead of a smooth, organic look.
 # ═════════════════════════════════════════════════════════════
 
 def _spike_color(bin_fraction, intensity):
-    """Couleur d'une pointe selon sa position fréquentielle (0=grave, 1=aigu)."""
+    """Return a spike color based on frequency position (0 = bass, 1 = treble)."""
 
     r = 255 * max(0.0, 1.0 - bin_fraction * 1.5)
     g = 255 * max(0.0, 1.0 - abs(bin_fraction - 0.5) * 1.7)
@@ -693,7 +682,7 @@ def make_visualizer_starburst(width, height, audio, t):
     max_ry = height * 0.47
 
     # ─────────────────────────────────────────
-    # Noyau central (pulse sur les basses)
+    # Central core (pulses with the bass).
     # ─────────────────────────────────────────
 
     core_energy = (audio.bass * 0.6 + audio.mid * 0.25 + audio.treble * 0.15) ** 0.75
@@ -717,15 +706,15 @@ def make_visualizer_starburst(width, height, audio, t):
                 plot(x, y, BLOCK, (r, g, b))
 
     # ─────────────────────────────────────────
-    # Pointes radiales (une par bin du spectre)
+    # Radial spikes (one per spectrum bin).
     # ─────────────────────────────────────────
 
     num_bins = audio.num_bins
     inner_fraction = core_fx * 1.35
 
-    # Rotation continue — vitesse et sens ajustables.
-    # Le bass ajoute un petit boost de vitesse sur les gros coups,
-    # pour que la rotation "accélère" avec l'énergie du morceau.
+    # Continuous rotation; adjust its speed and direction here.
+    # Strong bass hits add a small speed boost so the rotation
+    # accelerates with the track's energy.
     rotation_speed = 0.6
     rotation = t * rotation_speed + audio.bass * 0.15
 
@@ -752,7 +741,7 @@ def make_visualizer_starburst(width, height, audio, t):
             char = BLOCK if f < tip_fraction - 0.03 else SOFT
             plot(x, y, char, color_rgb)
 
-        # Peak-hold : petit éclat qui reste en l'air puis retombe.
+        # Peak hold: a small spark lingers, then falls.
         peak_fraction = inner_fraction + peak * (1.0 - inner_fraction) * 0.9
 
         if peak_fraction > tip_fraction + 0.01:
@@ -761,7 +750,7 @@ def make_visualizer_starburst(width, height, audio, t):
             plot(px, py, "•", (255, 255, 255))
 
     # ─────────────────────────────────────────
-    # Sérialisation
+    # Serialize the frame.
     # ─────────────────────────────────────────
 
     lines = []
@@ -784,14 +773,13 @@ def make_visualizer_starburst(width, height, audio, t):
 # GEKI FLOWER
 # ═════════════════════════════════════════════════════════════
 #
-# Des pétales arrondis (pas des pointes fines) qui poussent
-# depuis un cœur central chaud. Chaque pétale répond à un
-# groupe de bins du spectre, avec le même peak-hold que le
-# starburst pour garder le côté "coup".
+# Rounded petals grow from a warm central core. Each petal responds
+# to a group of spectrum bins and uses the starburst peak hold to
+# preserve its sharp-hit character.
 # ═════════════════════════════════════════════════════════════
 
 def _petal_color(petal_fraction, intensity):
-    """Couleur d'un pétale selon sa position dans le cercle (rose/violet/magenta)."""
+    """Return a petal color based on its position in the pink-purple-magenta palette."""
 
     r = 190 + 60 * math.sin(petal_fraction * math.pi * 2)
     g = 90 + 60 * math.sin(petal_fraction * math.pi * 2 + 2.0)
@@ -823,7 +811,7 @@ def make_visualizer_flower(width, height, audio, t):
     max_ry = height * 0.47
 
     # ─────────────────────────────────────────
-    # Cœur central (chaud, pulse sur les basses)
+    # Warm central core (pulses with the bass).
     # ─────────────────────────────────────────
 
     core_energy = (audio.bass * 0.6 + audio.mid * 0.25 + audio.treble * 0.15) ** 0.75
@@ -847,7 +835,7 @@ def make_visualizer_flower(width, height, audio, t):
                 plot(x, y, BLOCK, (r, g, b))
 
     # ─────────────────────────────────────────
-    # Pétales (groupes de bins du spectre)
+    # Petals (groups of spectrum bins).
     # ─────────────────────────────────────────
 
     petal_count = 10
@@ -884,7 +872,7 @@ def make_visualizer_flower(width, height, audio, t):
             progress = s / steps_along
             f_along = inner_fraction + (length_fraction - inner_fraction) * progress
 
-            # Forme "pétale" : étroit à la base et à la pointe, large au milieu.
+            # Petal shape: narrow at the base and tip, wide in the middle.
             taper = math.sin(math.pi * progress)
             half_width = max_half_width * taper
 
@@ -900,7 +888,7 @@ def make_visualizer_flower(width, height, audio, t):
                 char = BLOCK if abs(c) < steps_across * 0.72 else SOFT
                 plot(x, y, char, color_rgb)
 
-        # Peak-hold : petit éclat à la pointe qui retombe lentement.
+        # Peak hold: a small spark at the tip falls slowly.
         peak_length_fraction = inner_fraction + peak * (1.0 - inner_fraction) * 0.85
 
         if peak_length_fraction > length_fraction + 0.01:
@@ -909,7 +897,7 @@ def make_visualizer_flower(width, height, audio, t):
             plot(px, py, "•", (255, 255, 255))
 
     # ─────────────────────────────────────────
-    # Sérialisation
+    # Serialize the frame.
     # ─────────────────────────────────────────
 
     lines = []
@@ -932,17 +920,16 @@ def make_visualizer_flower(width, height, audio, t):
 # GEKI GALAXY
 # ═════════════════════════════════════════════════════════════
 #
-# Des bras spiralés d'étoiles qui tournent lentement, densité/
-# éclat réactifs au spectre. Pas de BLOCK/SOFT ici : on utilise
-# une palette de "points" (· ∘ ○ ✦ ★) dont la densité augmente
-# avec l'intensité, pour un rendu texturé plutôt que solide.
+# Slowly rotating spiral arms of stars react to the spectrum through
+# their density and brightness. Instead of BLOCK/SOFT, this theme uses
+# dots (· ∘ ○ ✦ ★) that grow denser with intensity for a textured look.
 # ═════════════════════════════════════════════════════════════
 
 STAR_CHARS = ["·", "∘", "○", "✦", "★"]
 
 
 def _star_char(intensity):
-    """Choisit un caractère d'étoile selon l'intensité (0-1)."""
+    """Choose a star character based on intensity (0-1)."""
 
     index = min(
         len(STAR_CHARS) - 1,
@@ -953,7 +940,7 @@ def _star_char(intensity):
 
 
 def _galaxy_color(radius_fraction, intensity):
-    """Dégradé violet/bleu au centre vers cyan/blanc en périphérie."""
+    """Create a purple-blue gradient at the center fading to cyan-white at the edges."""
 
     r = 140 + 60 * (1.0 - radius_fraction)
     g = 90 + 130 * radius_fraction
@@ -985,7 +972,7 @@ def make_visualizer_galaxy(width, height, audio, t):
     max_ry = height * 0.48
 
     # ─────────────────────────────────────────
-    # Cœur / noyau lumineux (pulse sur les basses)
+    # Bright core (pulses with the bass).
     # ─────────────────────────────────────────
 
     core_energy = (audio.bass * 0.6 + audio.mid * 0.25 + audio.treble * 0.15) ** 0.75
@@ -1010,7 +997,7 @@ def make_visualizer_galaxy(width, height, audio, t):
                 plot(x, y, char, (r, g, b))
 
     # ─────────────────────────────────────────
-    # Bras spiralés
+    # Spiral arms.
     # ─────────────────────────────────────────
 
     arm_count = 3
@@ -1030,7 +1017,7 @@ def make_visualizer_galaxy(width, height, audio, t):
 
             progress = s / stars_per_arm
 
-            # Densité d'étoiles plus forte près du centre (comme une vraie galaxie).
+            # Increase star density near the center, like a real galaxy.
             radius_fraction = inner_fraction + (progress ** 0.55) * (1.0 - inner_fraction)
 
             angle = arm_offset + progress * turns * 2 * math.pi + rotation
@@ -1051,7 +1038,7 @@ def make_visualizer_galaxy(width, height, audio, t):
             plot(x, y, char, color_rgb)
 
     # ─────────────────────────────────────────
-    # Sérialisation
+    # Serialize the frame.
     # ─────────────────────────────────────────
 
     lines = []
@@ -1071,12 +1058,203 @@ def make_visualizer_galaxy(width, height, audio, t):
 
 
 # ═════════════════════════════════════════════════════════════
+# GEKI PRISM
+# ═════════════════════════════════════════════════════════════
+#
+# A rotating, audio-shaped icosahedron floats over a mirrored
+# kaleidoscope. Bass hits trigger a brief, restrained color wash.
+# ═════════════════════════════════════════════════════════════
+
+PRISM_PHI = (1 + math.sqrt(5)) / 2
+PRISM_VERTICES = [
+    (-1, PRISM_PHI, 0), (1, PRISM_PHI, 0), (-1, -PRISM_PHI, 0), (1, -PRISM_PHI, 0),
+    (0, -1, PRISM_PHI), (0, 1, PRISM_PHI), (0, -1, -PRISM_PHI), (0, 1, -PRISM_PHI),
+    (PRISM_PHI, 0, -1), (PRISM_PHI, 0, 1), (-PRISM_PHI, 0, -1), (-PRISM_PHI, 0, 1),
+]
+PRISM_FACES = [
+    (0, 11, 5), (0, 5, 1), (0, 1, 7), (0, 7, 10), (0, 10, 11),
+    (1, 5, 9), (5, 11, 4), (11, 10, 2), (10, 7, 6), (7, 1, 8),
+    (3, 9, 4), (3, 4, 2), (3, 2, 6), (3, 6, 8), (3, 8, 9),
+    (4, 9, 5), (2, 4, 11), (6, 2, 10), (8, 6, 7), (9, 8, 1),
+]
+PRISM_FLASH_COLORS = [
+    (255, 42, 55),
+    (245, 248, 255),
+    (42, 105, 255),
+    (48, 255, 135),
+]
+PRISM_GLYPHS = ["·", "✦", "◇", "✧", "•"]
+
+
+def _prism_face_color(index, level):
+    hue = (0.52 + index * 0.137) % 1.0
+    red, green, blue = colorsys.hsv_to_rgb(hue, 0.78, 0.42 + 0.58 * level)
+    return int(red * 255), int(green * 255), int(blue * 255)
+
+
+def make_visualizer_prism(width, height, audio, t):
+    """Render a reactive polyhedron inside a mirrored color field."""
+    now = time.perf_counter()
+    seen_kick = getattr(audio, "prism_seen_kick", 0.0)
+    new_kicks = [stamp for stamp in audio.shockwaves if stamp > seen_kick]
+    if new_kicks:
+        latest_kick = max(new_kicks)
+        audio.prism_seen_kick = latest_kick
+        previous_flash = getattr(audio, "prism_flash_start", 0.0)
+        if latest_kick - previous_flash >= 0.42:
+            audio.prism_flash_start = latest_kick
+            audio.prism_flash_index = (getattr(audio, "prism_flash_index", -1) + 1) % len(PRISM_FLASH_COLORS)
+
+    flash_age = now - getattr(audio, "prism_flash_start", 0.0)
+    flash_strength = max(0.0, 1.0 - flash_age / 0.52) ** 2
+    flash_strength = min(1.0, flash_strength)
+    flash_color = PRISM_FLASH_COLORS[getattr(audio, "prism_flash_index", 0)]
+    flash_mix = 0.23 * flash_strength
+    background_rgb = tuple(
+        int(base * (1 - flash_mix) + flash * flash_mix)
+        for base, flash in zip((4, 5, 12), flash_color)
+    )
+
+    cx = width / 2.0
+    cy = height / 2.0
+    max_rx = width * 0.31
+    max_ry = height * 0.42
+    buffer = [[(" ", None) for _ in range(width)] for _ in range(height)]
+
+    def plot(x, y, char, rgb):
+        xi = int(round(x))
+        yi = int(round(y))
+        if 0 <= xi < width and 0 <= yi < height:
+            buffer[yi][xi] = (char, rgb)
+
+    # Fill the field with a mirrored, frequency-colored pattern.
+    wedge = (2 * math.pi) / 10
+    palette = [
+        (75, 35, 150), (32, 72, 190), (20, 145, 185), (35, 155, 105),
+        (155, 85, 35), (190, 40, 95), (115, 35, 170), (35, 110, 160),
+    ]
+    for y in range(height):
+        for x in range(width):
+            dx = (x - cx) / max(max_rx, 1)
+            dy = (y - cy) / max(max_ry, 1)
+            radius = math.sqrt(dx * dx + dy * dy)
+            angle = math.atan2(dy, dx) - t * 0.12
+            folded = abs((angle + wedge / 2) % wedge - wedge / 2)
+            ripple = math.sin(radius * 19 - folded * 15 + t * 0.8)
+            facet = math.cos(radius * 8 + folded * 25 - t * 0.25)
+            strength = max(0.0, ripple * 0.55 + facet * 0.32 - 0.24)
+            band = int((folded / wedge * 7 + radius * 3) * 2) % audio.num_bins
+            level = float(audio.spectrum[band])
+            if strength > 0.06:
+                base = palette[(int(folded / wedge * len(palette)) + int(radius * 3)) % len(palette)]
+                brightness = 0.28 + 0.52 * strength + 0.2 * level
+                rgb = tuple(min(255, int(channel * brightness + level * 36)) for channel in base)
+                glyph = PRISM_GLYPHS[min(len(PRISM_GLYPHS) - 1, int(strength * len(PRISM_GLYPHS)))]
+                buffer[y][x] = (glyph, rgb)
+
+    # Rotate the vertices and let nearby frequency bands deform them.
+    rotation_x = t * 0.38 + audio.treble * 0.06
+    rotation_y = t * 0.57 + audio.mid * 0.08
+    rotation_z = t * 0.21 + audio.bass * 0.05
+    scale = 1.0 + audio.bass * 0.07
+    projected = []
+    for index, vertex in enumerate(PRISM_VERTICES):
+        vx, vy, vz = vertex
+        norm = math.sqrt(vx * vx + vy * vy + vz * vz)
+        bin_index = int(index * audio.num_bins / len(PRISM_VERTICES))
+        deformation = 1.0 + float(audio.spectrum[bin_index]) * 0.17
+        vx, vy, vz = (component / norm * deformation for component in (vx, vy, vz))
+
+        y1 = vy * math.cos(rotation_x) - vz * math.sin(rotation_x)
+        z1 = vy * math.sin(rotation_x) + vz * math.cos(rotation_x)
+        x2 = vx * math.cos(rotation_y) + z1 * math.sin(rotation_y)
+        z2 = -vx * math.sin(rotation_y) + z1 * math.cos(rotation_y)
+        x3 = x2 * math.cos(rotation_z) - y1 * math.sin(rotation_z)
+        y3 = x2 * math.sin(rotation_z) + y1 * math.cos(rotation_z)
+        perspective = 2.75 / (3.4 - z2 * 0.36)
+        px = cx + x3 * perspective * scale * max_rx
+        py = cy + y3 * perspective * scale * max_ry
+        projected.append((px, py, z2))
+
+    face_order = sorted(
+        enumerate(PRISM_FACES),
+        key=lambda item: sum(projected[index][2] for index in item[1]) / 3,
+    )
+    face_glyphs = ["░", "▒", "▓", "█"]
+    for face_index, face in face_order:
+        points = [projected[index] for index in face]
+        a, b, c = points
+        min_x = max(0, int(math.floor(min(a[0], b[0], c[0]))))
+        max_x = min(width - 1, int(math.ceil(max(a[0], b[0], c[0]))))
+        min_y = max(0, int(math.floor(min(a[1], b[1], c[1]))))
+        max_y = min(height - 1, int(math.ceil(max(a[1], b[1], c[1]))))
+        denominator = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(denominator) < 0.0001:
+            continue
+
+        band_start = int(face_index * audio.num_bins / len(PRISM_FACES))
+        level = float(np.mean(audio.spectrum[band_start:band_start + 2]))
+        face_color = _prism_face_color(face_index, level)
+        glyph = face_glyphs[min(len(face_glyphs) - 1, int(level * len(face_glyphs)))]
+        for y in range(min_y, max_y + 1):
+            for x in range(min_x, max_x + 1):
+                w1 = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / denominator
+                w2 = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / denominator
+                w3 = 1.0 - w1 - w2
+                if w1 >= 0 and w2 >= 0 and w3 >= 0:
+                    plot(x, y, glyph, face_color)
+
+    # Draw bright edges and audio-reactive vertex sparks over the facets.
+    for face_index, face in face_order:
+        edge_color = _prism_face_color(face_index, 1.0)
+        for start_index, end_index in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
+            start = projected[start_index]
+            end = projected[end_index]
+            steps = max(1, int(max(abs(end[0] - start[0]), abs(end[1] - start[1]))))
+            delta_x = end[0] - start[0]
+            delta_y = end[1] - start[1]
+            if abs(delta_x) > abs(delta_y) * 1.7:
+                edge_glyph = "─"
+            elif abs(delta_y) > abs(delta_x) * 1.7:
+                edge_glyph = "│"
+            else:
+                edge_glyph = "╱" if delta_x * delta_y < 0 else "╲"
+            for step in range(steps + 1):
+                ratio = step / steps
+                plot(start[0] + (end[0] - start[0]) * ratio,
+                     start[1] + (end[1] - start[1]) * ratio,
+                     edge_glyph, edge_color)
+
+    for index, (x, y, _depth) in enumerate(projected):
+        band_index = int(index * audio.num_bins / len(PRISM_VERTICES))
+        level = float(audio.spectrum[band_index])
+        if level > 0.22:
+            plot(x, y, "✦" if level > 0.65 else "•", (225, 245, 255))
+
+    # Run-length encode foreground colors while keeping the background wash.
+    lines = []
+    for row in buffer:
+        parts = [f"\033[48;2;{background_rgb[0]};{background_rgb[1]};{background_rgb[2]}m"]
+        active_color = None
+        for char, rgb in row:
+            if rgb != active_color:
+                if rgb is None:
+                    parts.append("\033[39m")
+                else:
+                    parts.append(f"\033[38;2;{rgb[0]};{rgb[1]};{rgb[2]}m")
+                active_color = rgb
+            parts.append(char)
+        parts.append("\033[0m")
+        lines.append("".join(parts))
+    return lines
+
+
+# ═════════════════════════════════════════════════════════════
 # GEKI CLASSIC
 # ═════════════════════════════════════════════════════════════
 #
-# Le vrai visualizer historique : le spectre en barres verticales,
-# depuis le bas, sur toute la largeur — avec peak-hold caps qui
-# retombent doucement.
+# The original visualizer: a full-width spectrum of vertical bars
+# rising from the bottom, with peak-hold caps that fall slowly.
 # ═════════════════════════════════════════════════════════════
 
 def make_visualizer_classic(width, height, audio, t):
@@ -1087,7 +1265,7 @@ def make_visualizer_classic(width, height, audio, t):
         if 0 <= x < width and 0 <= y < height:
             buffer[y][x] = (char, rgb)
 
-    # Moins de barres que de bins, mais plus larges — look "EQ" classique.
+    # Fewer, wider bars than spectrum bins for a classic EQ look.
     bar_count = max(12, min(audio.num_bins, width // 3))
     bins_per_bar = max(1, audio.num_bins // bar_count)
 
@@ -1121,7 +1299,7 @@ def make_visualizer_classic(width, height, audio, t):
             for dx in range(bar_width):
                 plot(x0 + dx, y, BLOCK, color_rgb)
 
-        # Peak-hold : petit trait blanc qui retombe lentement.
+        # Peak hold: a small white marker that falls slowly.
         peak_height = int(peak * usable_height)
         peak_height = max(0, min(usable_height, peak_height))
 
@@ -1152,12 +1330,11 @@ def make_visualizer_classic(width, height, audio, t):
 # GEKI DANCE
 # ═════════════════════════════════════════════════════════════
 #
-# Un champ d'astéroïdes dispersés à l'écran (pas radial depuis
-# le centre comme les autres thèmes — mécanique différente).
-# Chaque roche a sa propre couleur (dégradé arc-en-ciel complet),
-# une silhouette irrégulière, et une taille qui pulse fort selon
-# sa propre tranche de fréquence. Position de base stable (spirale
-# à angle d'or), avec juste un léger flottement organique.
+# A field of asteroids scattered across the screen, rather than
+# radiating from the center like the other themes. Each rock has its
+# own rainbow color, irregular silhouette, and size that pulses with
+# its frequency band. Positions stay fixed on a golden-angle spiral,
+# with a subtle organic drift.
 # ═════════════════════════════════════════════════════════════
 
 ASTEROID_COUNT = 12
@@ -1199,17 +1376,16 @@ def make_visualizer_dance(width, height, audio, t):
 
     for i in range(ASTEROID_COUNT):
 
-        # Position de base stable, dispersée façon spirale à angle
-        # d'or (répartition organique mais toujours la même d'une
-        # frame à l'autre — pas de scintillement de position).
+        # Stable base positions follow a golden-angle spiral. This
+        # creates an organic distribution without frame-to-frame jitter.
         scatter_r = math.sqrt((i + 0.5) / ASTEROID_COUNT)
         scatter_angle = i * GOLDEN_ANGLE
 
         base_x = cx + math.cos(scatter_angle) * scatter_r * max_rx
         base_y = cy + math.sin(scatter_angle) * scatter_r * max_ry
 
-        # Léger flottement organique (pas un vrai déplacement, juste
-        # une respiration douce dans l'espace).
+        # Add a subtle organic drift: a gentle breathing effect rather
+        # than actual movement through space.
         drift_x = math.sin(t * 0.3 + i * 1.7) * width * 0.01
         drift_y = math.cos(t * 0.25 + i * 2.3) * height * 0.01
 
@@ -1222,15 +1398,15 @@ def make_visualizer_dance(width, height, audio, t):
         level = float(np.mean(audio.spectrum[start_bin:end_bin]))
         peak = float(np.mean(audio.spectrum_peak[start_bin:end_bin]))
 
-        # La taille pulse fort avec le niveau, et gonfle encore un
-        # peu de plus sur un pic frais (peak proche du niveau actuel).
+        # Size pulses with the level and grows a little more on a fresh
+        # peak (when the peak is close to the current level).
         radius_x_cells = 1.1 + level * 3.4 + max(0.0, peak - level) * 2.0
         radius_y_cells = max(1.0, radius_x_cells * 0.55)
 
         color_rgb = _asteroid_color(i, ASTEROID_COUNT, level)
 
-        # Silhouette irrégulière ("roche") : rayon modulé par deux
-        # harmoniques fixes propres à chaque astéroïde.
+        # Create an irregular rock silhouette by modulating its radius
+        # with two fixed harmonics unique to each asteroid.
         seed = i * 13.37
 
         box_x = int(radius_x_cells) + 2
@@ -1256,7 +1432,7 @@ def make_visualizer_dance(width, height, audio, t):
                     plot(ax + dx, ay + dy, char, color_rgb)
 
     # ─────────────────────────────────────────
-    # Sérialisation
+    # Serialize the frame.
     # ─────────────────────────────────────────
 
     lines = []
@@ -1276,17 +1452,18 @@ def make_visualizer_dance(width, height, audio, t):
 
 
 # ═════════════════════════════════════════════════════════════
-# THÈMES
+# THEMES
 #
-# Chaque thème est une fonction (width, height, audio, t) -> lignes.
-# Pour en ajouter un nouveau : écrire la fonction, puis l'ajouter
-# ici avec son nom (utilisé comme --nom en ligne de commande).
+# Each theme is a function with signature (width, height, audio, t) -> lines.
+# To add a theme, write the function and register it here with the name
+# used by the corresponding --name command-line option.
 # ═════════════════════════════════════════════════════════════
 
 THEMES = {
     "starburst": make_visualizer_starburst,
     "flower": make_visualizer_flower,
     "galaxy": make_visualizer_galaxy,
+    "prism": make_visualizer_prism,
     "classic": make_visualizer_classic,
     "dance": make_visualizer_dance,
 }
@@ -1298,158 +1475,93 @@ DEFAULT_THEME = "starburst"
 # INTERFACE
 # ═════════════════════════════════════════════════════════════
 
-def draw(
-    audio,
-    t,
-    title,
-    visualizer_fn
-):
+def _clip_text(text, limit):
+    """Clip plain text to a terminal column limit."""
+    text = str(text)
+    if limit <= 0:
+        return ""
+    if len(text) > limit:
+        return text[:max(0, limit - 1)] + "…"
+    return text
 
+
+def _frame_row(left, right, width):
+    """Build a fixed-width row for the playback frame."""
+    inner_width = max(0, width - 2)
+    left = _clip_text(left, inner_width)
+    right = _clip_text(right, max(0, inner_width - len(left)))
+    gap = max(0, inner_width - len(left) - len(right))
+    return (
+        color(66, 82, 105, "│")
+        + color(120, 220, 255, left)
+        + " " * gap
+        + color(185, 195, 215, right)
+        + color(66, 82, 105, "│")
+    )
+
+
+def _frame_item(text, width, selected=False):
+    """Build a selectable row for terminal menus."""
+    inner_width = max(0, width - 4)
+    text = _clip_text(text, inner_width)
+    fill = " " * max(0, inner_width - len(text))
+    item_color = (255, 185, 215) if selected else (175, 185, 205)
+    return (
+        color(66, 82, 105, "│ ")
+        + color(*item_color, text)
+        + fill
+        + color(66, 82, 105, " │")
+    )
+
+
+def draw(audio, t, title, visualizer_fn):
     width, height = terminal_size()
-
-    # Espace réservé à l'interface.
-    visual_height = max(
-        8,
-        height - 12
-    )
-
-    visual = visualizer_fn(
-        width,
-        visual_height,
-        audio,
-        t
-    )
-
-    # ─────────────────────────────────────────
-    # Temps
-    # ─────────────────────────────────────────
+    width = max(20, width)
+    visual_height = max(4, height - 11)
+    art_width = width - 2
 
     current = audio.position_seconds()
     duration = audio.duration_seconds()
-
     progress = current / duration if duration else 0
+    progress = min(max(progress, 0.0), 1.0)
+    mode = "LIVE CAPTURE" if duration is None else "FILE PLAYBACK"
+    theme_name = visualizer_fn.__name__.replace("make_visualizer_", "").upper()
 
-    progress = min(
-        max(progress, 0.0),
-        1.0
-    )
+    top = color(66, 82, 105, "╭" + "─" * (width - 2) + "╮")
+    divider = color(66, 82, 105, "├" + "─" * (width - 2) + "┤")
+    bottom = color(66, 82, 105, "╰" + "─" * (width - 2) + "╯")
 
-    # ─────────────────────────────────────────
-    # Progress bar
-    # ─────────────────────────────────────────
+    visual = visualizer_fn(art_width, visual_height, audio, t)
+    output = [
+        top,
+        _frame_row(" GEKI  /  TERMINAL AUDIO VISUALIZER", f"{mode}  ·  {theme_name} ", width),
+        _frame_row("", "", width),
+    ]
+    output.extend(color(66, 82, 105, "│") + line + color(66, 82, 105, "│") for line in visual)
+    output.extend([
+        divider,
+        _frame_row(" NOW PLAYING", "", width),
+        _frame_row(f"  ♪  {_clip_text(title, width - 9)}", "", width),
+    ])
 
-    bar_width = min(
-        42,
-        max(
-            10,
-            width - 35
-        )
-    )
-
+    content_width = max(8, width - 6)
     if duration is None:
-        progress_bar = f"● LIVE · {format_time(current)}"
+        progress_text = f"● LIVE   {format_time(current)}"
     else:
-        filled = int(progress * bar_width)
-        progress_bar = (
-            "━" * filled
-            + "●"
-            + "━" * max(0, bar_width - filled - 1)
-        )
+        time_text = f"{format_time(current)} / {format_time(duration)}"
+        bar_width = max(4, content_width - len(time_text) - 3)
+        filled = min(bar_width - 1, int(progress * bar_width))
+        progress_bar = "━" * filled + "●" + "━" * max(0, bar_width - filled - 1)
+        progress_text = f"{progress_bar}  {time_text}"
+    output.append(_frame_row(f"  {progress_text}", "", width))
+    output.extend([
+        _frame_row("  CTRL+C  STOP PLAYBACK", "", width),
+        bottom,
+    ])
 
-    # ─────────────────────────────────────────
-    # UI
-    # ─────────────────────────────────────────
-
-    output = []
-
-    output.append(
-        color(
-            120,
-            220,
-            255,
-            "  GEKI"
-        )
-        +
-        color(
-            120,
-            120,
-            140,
-            " // AUDIO VISUALIZER"
-        )
-    )
-
-    output.append("")
-
-    output.extend(visual)
-
-    output.append("")
-
-    # Track — couleurs pastel assorties au disque plutôt qu'un
-    # rose saturé.
-
-    output.append(
-        color(
-            180,
-            180,
-            200,
-            "  ♪ "
-        )
-        +
-        color(
-            255,
-            185,
-            215,
-            title
-        )
-    )
-
-    # Progression.
-    output.append(
-        color(
-            100,
-            100,
-            120,
-            "  "
-        )
-        +
-        color(
-            195,
-            175,
-            255,
-            progress_bar
-        )
-        +
-        " "
-        +
-        color(
-            180,
-            185,
-            210,
-            (
-                f"{format_time(current)}"
-                if duration is None
-                else f"{format_time(current)} / {format_time(duration)}"
-            )
-        )
-    )
-
-    # ─────────────────────────────────────────
-    # Draw
-    #
-    # "\033[K" après chaque ligne efface les résidus d'une
-    # frame précédente plus large (resize à chaud).
-    # "\033[J" en fin d'écriture efface tout ce qui traînerait
-    # en dessous (frame précédente plus haute).
-    # ─────────────────────────────────────────
-
+    # Clear each rendered line to remove leftovers after a terminal resize.
     sys.stdout.write("\033[H")
-
-    sys.stdout.write(
-        "\033[K\n".join(output)
-        +
-        "\033[K\033[J"
-    )
-
+    sys.stdout.write("\033[K\n".join(output) + "\033[K\033[J")
     sys.stdout.flush()
 
 
@@ -1519,7 +1631,7 @@ def ensure_live_helper():
         )
     except (OSError, subprocess.CalledProcessError) as error:
         details = getattr(error, "stderr", None) or str(error)
-        raise RuntimeError(f"Impossible de préparer la capture audio native :\n{details}") from error
+        raise RuntimeError(f"Could not prepare native audio capture:\n{details}") from error
 
     return executable
 
@@ -1535,7 +1647,7 @@ def list_live_processes(helper):
 
 
 class LiveAudioEngine(AudioEngine):
-    """AudioEngine alimenté par un flux Core Audio vivant et borné en mémoire."""
+    """AudioEngine backed by a live Core Audio stream with a bounded buffer."""
 
     def __init__(self, process_info, helper):
         self.capture = subprocess.Popen(
@@ -1554,13 +1666,13 @@ class LiveAudioEngine(AudioEngine):
             error_text = self.capture.stderr.read().decode("utf-8", errors="replace").strip()
             self.capture.wait(timeout=2)
             raise RuntimeError(
-                error_text or "La capture n’a pas démarré. Vérifie l’autorisation audio de macOS."
+                error_text or "Capture did not start. Check macOS audio permissions."
             )
 
         sample_rate = struct.unpack("=I", header[4:])[0]
         if sample_rate <= 0:
             self.capture.terminate()
-            raise RuntimeError("Le flux Core Audio a fourni une fréquence d’échantillonnage invalide.")
+            raise RuntimeError("The Core Audio stream returned an invalid sample rate.")
 
         super().__init__(sample_rate=sample_rate)
         self.is_live = True
@@ -1614,7 +1726,7 @@ class LiveAudioEngine(AudioEngine):
         return None
 
     def start(self):
-        # Le flux natif commence avant la boucle d’affichage.
+        # Start the native stream before entering the display loop.
         pass
 
     def stop(self):
@@ -1641,38 +1753,45 @@ class LiveAudioEngine(AudioEngine):
 
 
 def live_source_menu():
-    """Sélectionne une application qui émet actuellement du son."""
+    """Select an application that is currently playing audio."""
     if not sys.stdin.isatty():
-        print("GEKI: le mode live nécessite un terminal interactif.")
+        print("GEKI: live mode requires an interactive terminal.")
         return None
 
     try:
         helper = ensure_live_helper()
         processes = list_live_processes(helper)
     except (OSError, RuntimeError, subprocess.CalledProcessError, json.JSONDecodeError) as error:
-        print(f"GEKI: impossible de lister les applications audio : {error}")
+        print(f"GEKI: could not list audio applications: {error}")
         return None
 
     selected = 0
     theme_names = list(THEMES)
     selected_theme = theme_names.index(DEFAULT_THEME)
-    message = "↑/↓ application   ←/→ style   Entrée démarrer   r actualiser   q quitter"
+    message = "↑/↓ select app   ←/→ select theme   Enter start   r refresh   q quit"
     fd = sys.stdin.fileno()
     previous = termios.tcgetattr(fd)
     try:
         tty.setcbreak(fd)
         while True:
             clear()
-            print(color(120, 220, 255, "GEKI // CAPTURE LIVE"))
-            print("Applications avec une sortie audio active")
-            print(f"Style : {theme_names[selected_theme]}\n")
+            width = max(36, terminal_size()[0])
+            top = color(66, 82, 105, "╭" + "─" * (width - 2) + "╮")
+            divider = color(66, 82, 105, "├" + "─" * (width - 2) + "┤")
+            bottom = color(66, 82, 105, "╰" + "─" * (width - 2) + "╯")
+            print(top)
+            print(_frame_row(" GEKI  /  LIVE CAPTURE", f"{len(processes)} SOURCES ", width))
+            print(_frame_row(" Choose an app with active audio output", f"THEME  {theme_names[selected_theme].upper()} ", width))
+            print(divider)
             if not processes:
-                print("Aucune sortie audio active. Lance du son puis appuie sur r.")
+                print(_frame_row(" No active audio output. Start playback, then press r to refresh.", "", width))
             for index, process in enumerate(processes):
                 marker = "❯ " if index == selected else "  "
                 label = f"{marker}{process['name']}  (PID {process['pid']})"
-                print(color(255, 185, 215, label) if index == selected else label)
-            print("\n" + message)
+                print(_frame_item(label, width, selected=index == selected))
+            print(divider)
+            print(_frame_row(f" {message}", "", width))
+            print(bottom)
 
             key = os.read(fd, 1).decode("utf-8", errors="ignore")
             if not processes and key not in ("r", "R", "q", "Q", "\x03"):
@@ -1693,11 +1812,11 @@ def live_source_menu():
                 try:
                     processes = list_live_processes(helper)
                     selected = min(selected, max(0, len(processes) - 1))
-                    message = "Liste actualisée.  " + message
+                    message = "List refreshed.  " + message
                 except (OSError, RuntimeError, subprocess.CalledProcessError, json.JSONDecodeError) as error:
-                    message = f"Actualisation impossible : {error}"
+                    message = f"Refresh failed: {error}"
                 if not processes:
-                    message = "Aucune sortie audio active. Lance du son puis appuie sur r."
+                    message = "No active audio output. Start playback, then press r to refresh."
                 continue
             if key in ("q", "Q", "\x03"):
                 return None
@@ -1715,7 +1834,7 @@ def metadata_path(audio_path):
 
 
 def save_track_metadata(audio_path, info):
-    """Sauvegarde les informations utiles à la bibliothèque locale."""
+    """Save metadata used by the local library."""
     metadata = {
         "title": info.get("title") or os.path.basename(audio_path),
         "id": info.get("id"),
@@ -1731,7 +1850,7 @@ def save_track_metadata(audio_path, info):
 
 
 def load_library():
-    """Liste les MP3 du cache, avec compatibilité pour les anciens fichiers."""
+    """List cached MP3 files, including files without metadata."""
     if not os.path.isdir(CACHE_DIR):
         return []
 
@@ -1755,40 +1874,44 @@ def load_library():
 
 
 def library_menu():
-    """Affiche la bibliothèque et retourne le morceau et le thème choisis."""
+    """Show the library and return the selected track and theme."""
     if not sys.stdin.isatty():
-        print("GEKI: la bibliothèque interactive nécessite un terminal.")
+        print("GEKI: the interactive library requires a terminal.")
         return None
 
     tracks = load_library()
     if not tracks:
-        print("GEKI: aucun morceau dans la bibliothèque.")
-        print(f"Dossier: {CACHE_DIR}")
+        print("GEKI: the library is empty.")
+        print(f"Folder: {CACHE_DIR}")
         return None
 
     selected = 0
     theme_names = list(THEMES)
     selected_theme = theme_names.index(DEFAULT_THEME)
-    message = "↑/↓ morceau   ←/→ thème   Entrée lire   d supprimer   q quitter"
+    message = "↑/↓ select track   ←/→ select theme   Enter play   d delete   q quit"
     fd = sys.stdin.fileno()
     previous = termios.tcgetattr(fd)
     try:
         tty.setcbreak(fd)
         while True:
             clear()
-            print(color(120, 220, 255, "GEKI // BIBLIOTHÈQUE"))
-            print(f"{len(tracks)} morceau(x) — {CACHE_DIR}")
-            print(f"Style : {theme_names[selected_theme]}\n")
+            width = max(36, terminal_size()[0])
+            top = color(66, 82, 105, "╭" + "─" * (width - 2) + "╮")
+            divider = color(66, 82, 105, "├" + "─" * (width - 2) + "┤")
+            bottom = color(66, 82, 105, "╰" + "─" * (width - 2) + "╯")
+            print(top)
+            print(_frame_row(" GEKI  /  LIBRARY", f"{len(tracks)} TRACK(S) ", width))
+            print(_frame_row(f" {CACHE_DIR}", f"THEME  {theme_names[selected_theme].upper()} ", width))
+            print(divider)
             for index, track in enumerate(tracks):
                 marker = "❯ " if index == selected else "  "
                 metadata = track["metadata"]
                 detail = metadata.get("uploader") or os.path.basename(track["path"])
                 label = f"{marker}{track['title']}  [{detail}]"
-                if index == selected:
-                    print(color(255, 185, 215, label))
-                else:
-                    print(label)
-            print("\n" + message)
+                print(_frame_item(label, width, selected=index == selected))
+            print(divider)
+            print(_frame_row(f" {message}", "", width))
+            print(bottom)
 
             key = os.read(fd, 1).decode("utf-8", errors="ignore")
             if key == "\x1b":
@@ -1809,10 +1932,10 @@ def library_menu():
                 return tracks[selected], theme_names[selected_theme]
             if key.lower() == "d":
                 track = tracks[selected]
-                sys.stdout.write(f"\nSupprimer « {track['title']} » ? (o/N) ")
+                sys.stdout.write(f"\nDelete ‘{track['title']}’? (y/N) ")
                 sys.stdout.flush()
                 answer = os.read(fd, 1).decode("utf-8", errors="ignore")
-                if answer.lower() in ("o", "y"):
+                if answer.lower() == "y":
                     os.remove(track["path"])
                     try:
                         os.remove(metadata_path(track["path"]))
@@ -1822,9 +1945,9 @@ def library_menu():
                     if not tracks:
                         return None
                     selected = min(selected, len(tracks) - 1)
-                    message = "Morceau supprimé."
+                    message = "Track deleted."
                 else:
-                    message = "Suppression annulée."
+                    message = "Deletion cancelled."
     except KeyboardInterrupt:
         return None
     finally:
@@ -1833,34 +1956,34 @@ def library_menu():
 
 
 def is_url(source):
-    """Détecte si l'argument fourni est un lien plutôt qu'un fichier local."""
+    """Return whether the argument is a URL rather than a local file."""
     return source.startswith("http://") or source.startswith("https://")
 
 
 def download_audio(url):
-    """Télécharge l'audio d'un lien via yt-dlp, avec cache local.
+    """Download audio from a URL with yt-dlp and cache it locally.
 
-    Retourne (chemin_fichier, titre_affichable)."""
+    Returns (file_path, display_title)."""
 
     try:
         import yt_dlp
     except ImportError:
 
-        print("GEKI: yt-dlp n'est pas installé.")
+        print("GEKI: yt-dlp is not installed.")
         print()
-        print("Installe-le avec :")
+        print("Install it with:")
         print("  pip3 install yt-dlp")
         print()
-        print("Et si ce n'est pas déjà fait, ffmpeg (requis pour")
-        print("extraire l'audio) :")
+        print("If you have not already, install ffmpeg (required to")
+        print("extract audio):")
         print("  brew install ffmpeg")
 
         sys.exit(1)
 
     os.makedirs(CACHE_DIR, exist_ok=True)
 
-    # Récupère les infos sans télécharger, pour connaître
-    # l'id (clé de cache) et le titre avant de lancer quoi que ce soit.
+    # Fetch metadata without downloading so we know the ID (cache key)
+    # and title before starting the download.
     probe_opts = {
         "quiet": True,
         "no_warnings": True,
@@ -1872,9 +1995,9 @@ def download_audio(url):
             info = ydl.extract_info(url, download=False)
     except Exception as error:
 
-        print("GEKI: impossible de lire ce lien.")
+        print("GEKI: could not read this URL.")
         print()
-        print(f"Erreur: {error}")
+        print(f"Error: {error}")
 
         sys.exit(1)
 
@@ -1888,10 +2011,10 @@ def download_audio(url):
 
     if os.path.exists(cached_path):
         save_track_metadata(cached_path, info)
-        print(f"GEKI: '{title}' déjà en cache, lecture directe.")
+        print(f"GEKI: '{title}' is cached; playing it now.")
         return cached_path, title
 
-    print(f"GEKI: téléchargement de '{title}'...")
+    print(f"GEKI: downloading '{title}'...")
 
     def progress_hook(d):
 
@@ -1903,7 +2026,7 @@ def download_audio(url):
 
         elif d["status"] == "finished":
 
-            sys.stdout.write("\r  conversion audio...        \n")
+            sys.stdout.write("\r  converting audio...        \n")
             sys.stdout.flush()
 
     download_opts = {
@@ -1925,11 +2048,11 @@ def download_audio(url):
     except Exception as error:
 
         print()
-        print("GEKI: échec du téléchargement.")
+        print("GEKI: download failed.")
         print()
-        print(f"Erreur: {error}")
+        print(f"Error: {error}")
         print()
-        print("Vérifie que ffmpeg est installé (brew install ffmpeg).")
+        print("Check that ffmpeg is installed (brew install ffmpeg).")
 
         sys.exit(1)
 
@@ -1942,11 +2065,10 @@ def download_audio(url):
 
 
 def build_queue(source):
-    """Retourne une liste de sources à lire à la suite.
+    """Return a list of sources to play in sequence.
 
-    Pour un fichier local ou un lien vers une seule vidéo : liste
-    à un seul élément. Pour un lien de playlist : liste de liens,
-    un par morceau, dans l'ordre de la playlist."""
+    A local file or single video URL produces a one-item list. A
+    playlist URL produces one URL per track, in playlist order."""
 
     if not is_url(source):
         return [source]
@@ -1955,17 +2077,16 @@ def build_queue(source):
         import yt_dlp
     except ImportError:
 
-        print("GEKI: yt-dlp n'est pas installé.")
+        print("GEKI: yt-dlp is not installed.")
         print()
-        print("Installe-le avec :")
+        print("Install it with:")
         print("  pip3 install yt-dlp")
 
         sys.exit(1)
 
-    # "extract_flat" : scan léger et rapide (juste id/titre/url par
-    # entrée), sans aller chercher tous les formats de chaque vidéo
-    # un par un — sinon une grosse playlist mettrait un temps fou
-    # juste à être détectée.
+    # "extract_flat" performs a quick scan for each entry's ID, title,
+    # and URL without fetching every video's available formats. This
+    # avoids long delays just to detect a large playlist.
     probe_opts = {
         "quiet": True,
         "no_warnings": True,
@@ -1978,9 +2099,9 @@ def build_queue(source):
             info = ydl.extract_info(source, download=False)
     except Exception as error:
 
-        print("GEKI: impossible de lire ce lien.")
+        print("GEKI: could not read this URL.")
         print()
-        print(f"Erreur: {error}")
+        print(f"Error: {error}")
 
         sys.exit(1)
 
@@ -1995,12 +2116,12 @@ def build_queue(source):
     entries = [e for e in info.get("entries", []) if e]
 
     if not entries:
-        print("GEKI: playlist vide ou inaccessible.")
+        print("GEKI: playlist is empty or unavailable.")
         sys.exit(1)
 
-    # Lien de "Mix" YouTube (watch?v=...&list=RD...&index=N) : le
-    # paramètre index indique le morceau sur lequel on a cliqué.
-    # Sans ça, on repartirait toujours du tout début du mix.
+    # For YouTube Mix URLs (watch?v=...&list=RD...&index=N), the index
+    # identifies the selected track. Without it, playback would always
+    # restart at the beginning of the mix.
     query = parse_qs(urlparse(source).query)
 
     if "index" in query:
@@ -2013,12 +2134,12 @@ def build_queue(source):
         entries = entries[start_index - 1:]
 
         if not entries:
-            print("GEKI: index hors limites pour ce mix, lecture depuis le début.")
+            print("GEKI: mix index is out of range; starting from the beginning.")
             entries = [e for e in info.get("entries", []) if e]
 
     playlist_title = info.get("title", "playlist")
 
-    print(f"GEKI: playlist '{playlist_title}' — {len(entries)} morceau(x).")
+    print(f"GEKI: playlist '{playlist_title}' — {len(entries)} track(s).")
 
     queue = []
 
@@ -2036,15 +2157,16 @@ def build_queue(source):
         if entry_url.startswith("http"):
             queue.append(entry_url)
         else:
-            # extract_flat renvoie parfois juste l'id de la vidéo.
+            # extract_flat sometimes returns only the video ID.
             queue.append(f"https://www.youtube.com/watch?v={entry_url}")
 
     return queue
 
 
 def resolve_source(source):
-    """Retourne (chemin_fichier, titre_affichable) pour un fichier
-    local ou un lien (téléchargé via yt-dlp au besoin)."""
+    """Return (file_path, display_title) for a local file or URL.
+
+    URLs are downloaded through yt-dlp when needed."""
 
     if is_url(source):
         return download_audio(source)
@@ -2076,7 +2198,7 @@ def main():
         print('  python3 geki.py "https://youtube.com/watch?v=..."')
         print('  python3 geki.py "https://youtube.com/playlist?list=..."')
         print()
-        print(f"Thèmes disponibles : {', '.join(THEMES)}")
+        print(f"Available themes: {', '.join(THEMES)}")
 
         sys.exit(1)
 
@@ -2119,8 +2241,8 @@ def main():
 
         if requested not in THEMES:
 
-            print(f"GEKI: thème inconnu '{requested}'")
-            print(f"Thèmes disponibles : {', '.join(THEMES)}")
+            print(f"GEKI: unknown theme '{requested}'")
+            print(f"Available themes: {', '.join(THEMES)}")
 
             sys.exit(1)
 
@@ -2128,7 +2250,7 @@ def main():
 
     if source is None and not positional and live_selection is None:
 
-        print("GEKI: aucun fichier ou lien fourni.")
+        print("GEKI: no file or URL was provided.")
 
         sys.exit(1)
 
@@ -2139,7 +2261,7 @@ def main():
         audio = None
         error_message = None
         try:
-            print("GEKI: démarrage de la capture. Accepte la demande macOS si elle apparaît.")
+            print("GEKI: starting capture. Accept the macOS prompt if it appears.")
             audio = LiveAudioEngine(process_info, ensure_live_helper())
             audio.start()
             hide_cursor()
@@ -2158,12 +2280,12 @@ def main():
                 audio.stop()
                 if audio.capture.returncode and not error_message:
                     error_message = audio.capture_error or (
-                        f"Le helper audio s’est arrêté (code {audio.capture.returncode})."
+                        f"The audio helper stopped (exit code {audio.capture.returncode})."
                     )
             show_cursor()
             clear()
         if error_message:
-            print(f"GEKI: la capture live a échoué.\n{error_message}")
+            print(f"GEKI: live capture failed.\n{error_message}")
         return
 
     if source is None:
@@ -2173,7 +2295,7 @@ def main():
 
     if not queue:
 
-        print("GEKI: rien à lire.")
+        print("GEKI: nothing to play.")
 
         sys.exit(1)
 
@@ -2192,7 +2314,7 @@ def main():
             if not os.path.exists(filename):
 
                 print(
-                    f"GEKI: fichier introuvable, morceau ignoré: {filename}"
+                    f"GEKI: file not found; skipping track: {filename}"
                 )
 
                 continue
@@ -2206,12 +2328,12 @@ def main():
             except Exception as error:
 
                 print(
-                    "GEKI: impossible de charger "
-                    "ce morceau, il est ignoré."
+                    "GEKI: could not load this track; "
+                    "skipping it."
                 )
 
                 print()
-                print(f"Erreur: {error}")
+                print(f"Error: {error}")
 
                 continue
 

@@ -87,11 +87,11 @@ Tracks play one after another. For playlists with an `index` parameter, GEKI sta
 Add the theme name after the source, using two hyphens:
 
 ```sh
-geki "music.mp3" --galaxy
+geki "music.mp3" --prism
 geki "https://www.youtube.com/watch?v=VIDEO_ID" --classic
 ```
 
-Available themes are `--starburst`, `--flower`, `--galaxy`, `--classic`, and `--dance`. The default is `starburst`.
+Available themes are `--starburst`, `--flower`, `--galaxy`, `--prism`, `--classic`, and `--dance`. The default is `starburst`.
 
 ### Stop playback
 
@@ -154,6 +154,7 @@ Live capture requires macOS 14.2 or later. It is not available on Windows or Lin
 | `starburst` | A central core and radial spikes that react to frequency bands. |
 | `flower` | A central core and petals that respond to the spectrum. |
 | `galaxy` | Rotating spiral arms of stars around a bright core. |
+| `prism` | A rotating, audio-shaped icosahedron over a mirrored kaleidoscope, with subtle color washes on bass hits. |
 | `classic` | Vertical equalizer bars with peak markers. |
 | `dance` | A colorful field of asteroids that pulse independently. |
 
